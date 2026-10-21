@@ -1,4 +1,5 @@
 services:
+  # ================= 1. APPLICATION, DB & PROXY =================
   nginx:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -11,6 +12,7 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
     networks:
       - frontend-net
+      - monitoring-net
     depends_on:
       - blog-app
 
@@ -68,11 +70,97 @@ services:
       mysql:
         condition: service_healthy
 
+  # ================= 2. MONITORING STACK (COMMIT 2) =================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - monitoring-net
+    depends_on:
+      - prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring-net
+
+  mysql-exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: mysql-exporter
+    restart: unless-stopped
+    ports:
+      - "9104:9104"
+    volumes:
+      - ./prometheus/.my.cnf:/.my.cnf:ro
+    command:
+      - '--config.my-cnf=/.my.cnf'
+    networks:
+      - backend-net
+      - monitoring-net
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-exporter
+    restart: unless-stopped
+    ports:
+      - "9113:9113"
+    command:
+      - '--nginx.scrape-uri=http://nginx:80/stub_status'
+    networks:
+      - monitoring-net
+    depends_on:
+      - nginx
+
 networks:
   frontend-net:
     driver: bridge
   backend-net:
     driver: bridge
+  monitoring-net:
+    driver: bridge
 
 volumes:
   mysql_data:
+  prometheus_data:
+  grafana_data:
