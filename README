@@ -1,0 +1,40 @@
+# Đề 7: Hệ thống Blog / CMS
+
+- **Họ và tên sinh viên:** Lê Nam Khánh
+- **Mã số sinh viên:** DTC245220024
+- **Lớp:** ATTT_K23A
+- **Môi trường triển khai:** Ubuntu 24.04 LTS (VMware) + Docker & Docker Compose
+
+---
+
+## 1. Kiến trúc hệ thống
+Hệ thống được đóng gói và điều phối hoàn toàn bằng **Docker Compose** với 3 phân vùng mạng cô lập (`frontend-net`, `backend-net`, `monitoring-net`):
+1. **Nginx Reverse Proxy (`nginx-proxy`):** Đứng đầu hệ thống (cổng `80`, `443`), chuyển hướng HTTP sang HTTPS tự ký, gắn các Security Headers và cung cấp `/stub_status` cho Prometheus.
+2. **Ứng dụng Blog/CMS (`blog-app`):** Xây dựng bằng PHP 8.3 + Apache, quản lý Bài viết, Danh mục, Người dùng. Chạy dưới quyền **non-root user** (`www-data`) ở cổng nội bộ `8080`.
+3. **Cơ sở dữ liệu (`mysql-db`) & Quản trị (`phpmyadmin`):** Sử dụng MySQL 8.0, cô lập hoàn toàn trong `backend-net` (không mở cổng 3306 ra ngoài host), áp dụng phân quyền tối thiểu (Least Privilege).
+4. **Hệ thống Giám sát (`prometheus`, `grafana`, `cadvisor`, `node-exporter`, `mysql-exporter`, `nginx-exporter`):** Thu thập metrics thời gian thực từ Host, Container, Web Server và Database.
+5. **Hệ thống Quản lý Log tập trung (`loki`, `promtail`):** Thu thập toàn bộ container logs qua Docker Socket và truy vấn bằng LogQL trên Grafana.
+
+---
+
+## 2. Hướng dẫn cài đặt và khởi chạy
+
+### Bước 1: Clone repository
+```
+git clone git@github.com:Khanhslee/DTC245220024_De7-Blog-CMS.git
+cd DTC245220024_De7-Blog-CMS
+```
+### Bước 2: Thiết lập biến môi trường và chứng chỉ SSL tự ký
+```
+cp .env.example .env
+
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/certs/nginx.key \
+  -out nginx/certs/nginx.crt \
+  -subj "/C=VN/ST=ThaiNguyen/L=ThaiNguyen/O=ICTU/OU=ATTT/CN=localhost"
+```
+### Bước 3: Khởi chạy toàn bộ dịch vụ bằng Docker Compose
+```
+docker compose up -d --build
+docker compose ps
+```
